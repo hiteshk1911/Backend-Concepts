@@ -1,0 +1,722 @@
+- Authorization Server (our own microservice) — issues JWT access tokens and refresh tokens, exposes JWK set and token endpoints and consent UI.
+
+- Resource Server (a mock Gmail Contacts API) — serves a protected /contacts endpoint which accepts the access token issued by our Authorization Server.
+
+- Client (Print App) — a web app that acts as an OAuth client. It starts the Authorization Code flow, receives the code, exchanges it for tokens, calls /contacts and displays printable contacts.
+
+- Resource Owner (User) — simulated via an in-app login (users stored in memory) — when client redirects to Authorization Server the user logs in and gives consent.
+
+Note: this is a local demo. We mock a Gmail-like resource server (contacts) rather than calling real Gmail APIs. The OAuth2 flow and token validation are identical to production usage.
+
+Overview (ports & endpoints)
+
+We’ll run them on these ports:
+
+Authorization Server: http://localhost:9000
+
+    Authorization endpoint: /oauth2/authorize (Spring built-in)
+    Token endpoint: /oauth2/token
+    JWK set: /.well-known/jwks.json
+    Login and consent UI served from this app.
+
+Resource Server (Contacts API): http://localhost:9100
+
+    Protected API: GET /api/contacts
+
+Client (Print App): http://localhost:8080
+
+Redirect URI configured: http://localhost:8080/login/oauth2/code/print-client
+Home / with "Connect to Contacts" button and page to display contacts.
+
+We will configure a client in the Authorization Server called print-client with:
+
+    client_id: print-client
+    client_secret: secret (for demo; in production use stronger secret or use PKCE for public clients)
+    redirect_uri: http://localhost:8080/login/oauth2/code/print-client
+    authorization_grant_type: authorization_code, refresh_token
+    scope: contacts.read
+
+Access tokens will be JWTs signed by the Authorization Server; Resource Server will validate tokens using the Authorization Server's JWKs endpoint.
+
+1) Authorization Server (auth-server)
+
+Create a Spring Boot app auth-server.
+
+pom.xml
+<!-- auth-server/pom.xml -->
+<project xmlns="http://maven.apache.org/POM/4.0.0" ...>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>auth-server</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <properties>
+    <java.version>17</java.version>
+    <spring.boot.version>3.2.3</spring.boot.version> <!-- adjust to your local -->
+    <spring.auth.server.version>1.1.0</spring.auth.server.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-thymeleaf</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-oauth2-authorization-server</artifactId>
+      <version>${spring.auth.server.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>com.nimbusds</groupId>
+      <artifactId>nimbus-jose-jwt</artifactId>
+    </dependency>
+
+    <!-- devtools optional -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-devtools</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+
+application.yml
+# auth-server/src/main/resources/application.yml
+server:
+  port: 9000
+
+spring:
+  thymeleaf:
+    cache: false
+
+logging:
+  level:
+    org.springframework.security: INFO
+
+Main class & configuration
+
+We will:
+
+    Configure Spring Authorization Server with an in-memory client print-client.
+    Provide a JWK source (RSA key) for signing JWTs.
+    Provide an in-memory user for login and a simple consent page.
+
+Create these files:
+
+//AuthServerApplication.java
+
+package com.example.authserver;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class AuthServerApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(AuthServerApplication.class, args);
+    }
+}
+
+//AuthorizationServerConfig.java
+
+package com.example.authserver.config;
+
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
+import java.util.UUID;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import org.springframework.security.oauth2.core.AuthorizationGrantType;
+import org.springframework.security.oauth2.jwt.*;
+import org.springframework.security.oauth2.server.authorization.*;
+import org.springframework.security.oauth2.server.authorization.client.*;
+import org.springframework.security.oauth2.server.authorization.config.ProviderSettings;
+import org.springframework.security.web.SecurityFilterChain;
+
+import com.nimbusds.jose.jwk.*;
+import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
+
+@Configuration
+public class AuthorizationServerConfig {
+
+    @Bean
+    public RegisteredClientRepository registeredClientRepository(PasswordEncoder passwordEncoder) {
+        RegisteredClient printClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId("print-client")
+                .clientSecret(passwordEncoder.encode("secret"))
+                .redirectUri("http://localhost:8080/login/oauth2/code/print-client")
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+                .scope("contacts.read")
+                .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
+                .build();
+
+        return new InMemoryRegisteredClientRepository(printClient);
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    // provider settings (issuer)
+    @Bean
+    public ProviderSettings providerSettings() {
+        return ProviderSettings.builder().issuer("http://localhost:9000").build();
+    }
+
+    // configure endpoints & security filter chain
+    @Bean
+    public SecurityFilterChain authServerSecurityFilterChain(HttpSecurity http) throws Exception {
+        OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
+        // allow form login for user authentication
+        http
+            .formLogin(Customizer.withDefaults());
+        return http.build();
+    }
+
+    // JWK source (RSA)
+    @Bean
+    public JWKSource<com.nimbusds.jose.proc.SecurityContext> jwkSource() throws Exception {
+        RSAKey rsaKey = new RSAKeyGenerator(2048)
+                .keyID("auth-server-key")
+                .generate();
+        JWKSet jwkSet = new JWKSet(rsaKey);
+        return (jwkSelector, securityContext) -> jwkSelector.select(jwkSet);
+    }
+
+    // OAuth2AuthorizationService and AuthorizationConsentService can be default in-memory beans
+}
+
+//DefaultSecurityConfig.java (users + simple login)
+
+package com.example.authserver.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.core.userdetails.*;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+public class DefaultSecurityConfig {
+
+    @Bean
+    public UserDetailsService users() {
+        UserDetails user = User.withDefaultPasswordEncoder() // simple for demo
+                .username("alice")
+                .password("password")
+                .roles("USER")
+                .build();
+        return new InMemoryUserDetailsManager(user);
+    }
+
+    @Bean
+    public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
+        http
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/login", "/error", "/consent").permitAll()
+                .anyRequest().authenticated()
+            )
+            .formLogin(Customizer -> {});
+        return http.build();
+    }
+}
+
+Consent controller & template
+
+    Spring Authorization Server by default provides a consent page if requireAuthorizationConsent(true). We’ll implement a simple consent page template (Thymeleaf).
+
+    Create src/main/resources/templates/consent.html:
+
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <title>Consent</title>
+</head>
+<body>
+  <h2>Consent</h2>
+  <p>Client <b th:text="${clientId}"></b> is requesting scopes:</p>
+  <ul>
+    <li th:each="scope : ${scopes}" th:text="${scope}"></li>
+  </ul>
+  <form method="post" th:action="@{/oauth2/authorize}" >
+    <input type="hidden" name="user_oauth_approval" value="true"/>
+    <button type="submit">Approve</button>
+  </form>
+</body>
+</html>
+
+
+Note: Spring Authorization Server expects a special model for consent; for a full production consent controller you'd map the authorization request attributes. For this demo, enabling the default consent support and having a simple page is enough — Spring will use default consent handling. If you run into missing binding details, a tiny controller to map to Spring's model attributes can be added. (The included configuration requireAuthorizationConsent(true) triggers the consent step.)
+
+2) Resource Server (contacts-api)
+
+    This is a protected API that returns a JSON list of contacts and validates incoming Bearer tokens via JWT and JWKs from our authorization server.
+
+pom.xml
+<!-- resource-server/pom.xml -->
+<project ...>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>contacts-api</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+
+  <properties>
+    <java.version>17</java.version>
+    <spring.boot.version>3.2.3</spring.boot.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+
+application.yml
+# resource-server/src/main/resources/application.yml
+server:
+  port: 9100
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:9000/.well-known/jwks.json
+logging:
+  level:
+    org.springframework.security: INFO
+
+Main class and controller
+ContactsApiApplication.java
+package com.example.contactsapi;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class ContactsApiApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(ContactsApiApplication.class, args);
+    }
+}
+
+//SecurityConfig.java
+
+package com.example.contactsapi.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+public class SecurityConfig {
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+          .authorizeHttpRequests(auth -> auth
+              .requestMatchers("/api/contacts").hasAuthority("SCOPE_contacts.read")
+              .anyRequest().authenticated()
+          )
+          .oauth2ResourceServer(oauth2 -> oauth2.jwt());
+        return http.build();
+    }
+}
+
+//ContactsController.java
+
+package com.example.contactsapi.controller;
+
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class ContactsController {
+
+    @GetMapping("/api/contacts")
+    public List<Map<String,String>> contacts() {
+        return List.of(
+            Map.of("name","Alice Johnson","email","alice@example.com","phone","+1-555-0101"),
+            Map.of("name","Bob Martin","email","bob@example.com","phone","+1-555-0202"),
+            Map.of("name","Srishti Patel","email","srishti@example.com","phone","+91-98765-43210")
+        );
+    }
+}
+
+
+This resource server expects the JWT to contain the scope claim with contacts.read. Spring's resource server will grant SCOPE_contacts.read authority for such a token.
+
+3) Client (Print App)
+
+    The client is a Spring Boot web app using Spring Security OAuth2 Client. It will:
+    Have a homepage with "Connect to Contacts" which triggers the Authorization Code flow.
+    After successful login, exchange code for token (handled by Spring), then call resource server /api/contacts using the obtained access token.
+
+pom.xml
+<!-- client-app/pom.xml -->
+<project ...>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>client-app</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+
+  <properties>
+    <java.version>17</java.version>
+    <spring.boot.version>3.2.3</spring.boot.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-thymeleaf</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-oauth2-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-oauth2-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+
+application.yml
+# client-app/src/main/resources/application.yml
+server:
+  port: 8080
+
+spring:
+  thymeleaf:
+    cache: false
+
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          print-client:
+            client-id: print-client
+            client-secret: secret
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            scope: contacts.read
+            client-name: Print App
+        provider:
+          auth-server:
+            authorization-uri: http://localhost:9000/oauth2/authorize
+            token-uri: http://localhost:9000/oauth2/token
+            jwk-set-uri: http://localhost:9000/.well-known/jwks.json
+            user-info-uri: http://localhost:9000/userinfo # not used here
+            user-name-attribute: sub
+        default-client-registration-id: print-client
+
+
+Note: userinfo isn't necessary for plain authorization code flow that uses only scopes. We will use the OAuth2AuthorizedClientService to get the access token and then call resource server.
+
+Main & Security config
+
+//ClientAppApplication.java
+package com.example.clientapp;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class ClientAppApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(ClientAppApplication.class, args);
+    }
+}
+
+//SecurityConfig.java
+
+package com.example.clientapp.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+public class SecurityConfig {
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+          .authorizeHttpRequests(auth -> auth
+              .requestMatchers("/", "/login").permitAll()
+              .anyRequest().authenticated()
+          )
+          .oauth2Login(); // enables Authorization Code flow via Spring Security
+        return http.build();
+    }
+}
+
+Controller + Thymeleaf templates
+
+//HomeController.java
+
+package com.example.clientapp.controller;
+
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.client.*;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.client.annotation.RegisteredOAuth2AuthorizedClient;
+import org.springframework.security.oauth2.core.*;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.client.RestTemplate;
+
+@Controller
+public class HomeController {
+
+    private final OAuth2AuthorizedClientService clientService;
+    private final RestTemplate restTemplate = new RestTemplate();
+
+    @Autowired
+    public HomeController(OAuth2AuthorizedClientService clientService) {
+        this.clientService = clientService;
+    }
+
+    @GetMapping("/")
+    public String index(Model model, Authentication authentication) {
+        boolean loggedIn = authentication != null && authentication.isAuthenticated();
+        model.addAttribute("loggedIn", loggedIn);
+        return "index";
+    }
+
+    @GetMapping("/print")
+    public String print(Model model, OAuth2AuthenticationToken authentication) {
+        if (authentication == null) {
+            return "redirect:/";
+        }
+
+        String registrationId = authentication.getAuthorizedClientRegistrationId();
+        String principalName = authentication.getName();
+
+        OAuth2AuthorizedClient client = clientService.loadAuthorizedClient(
+                registrationId, principalName);
+
+        if (client == null) {
+            return "redirect:/";
+        }
+
+        OAuth2AccessToken accessToken = client.getAccessToken();
+        String tokenValue = accessToken.getTokenValue();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(tokenValue);
+
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+        ResponseEntity<List> response = restTemplate.exchange(
+                "http://localhost:9100/api/contacts",
+                HttpMethod.GET,
+                request,
+                List.class
+        );
+
+        List<Map<String,String>> contacts = response.getBody();
+        model.addAttribute("contacts", contacts);
+        model.addAttribute("tokenExpiresAt", accessToken.getExpiresAt());
+        return "print";
+    }
+}
+
+Templates
+
+src/main/resources/templates/index.html:
+
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <title>Print App</title>
+</head>
+<body>
+  <h1>Print App</h1>
+  <div th:if="${loggedIn}">
+    <p>You're logged in. <a href="/print">Fetch and Print Contacts</a></p>
+    <form action="/logout" method="post"><button type="submit">Logout</button></form>
+  </div>
+  <div th:unless="${loggedIn}">
+    <a href="/oauth2/authorization/print-client">Connect to Contacts (Login)</a>
+  </div>
+</body>
+</html>
+
+
+src/main/resources/templates/print.html:
+
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <title>Contacts</title>
+</head>
+<body>
+  <h1>Contacts (Printable)</h1>
+  <p>Access token expires at: <span th:text="${tokenExpiresAt}"></span></p>
+  <table border="1">
+    <tr><th>Name</th><th>Email</th><th>Phone</th></tr>
+    <tr th:each="c : ${contacts}">
+      <td th:text="${c['name']}"></td>
+      <td th:text="${c['email']}"></td>
+      <td th:text="${c['phone']}"></td>
+    </tr>
+  </table>
+  <button onclick="window.print()">Print</button>
+  <p><a href="/">Back</a></p>
+</body>
+</html>
+
+=> How the flow works in this demo
+
+    User visits http://localhost:8080 and clicks Connect.
+    Spring Security builds the authorization request and redirects the user to the Authorization Server at http://localhost:9000/oauth2/authorize with parameters including client_id=print-client, redirect_uri=http://localhost:8080/login/oauth2/code/print-client, response_type=code, scope=contacts.read, state=....
+    Authorization Server shows login page — user logs in as alice/password (from in-memory store).
+    Authorization Server shows consent page (because we configured requireAuthorizationConsent(true)), user approves scopes.
+    Auth server redirects back to client http://localhost:8080/login/oauth2/code/print-client?code=...&state=....
+    Spring Security client auto-exchanges the code at http://localhost:9000/oauth2/token using the client credentials (print-client/secret) and receives an access token (JWT) and a refresh token.
+    Client stores authorized client and its tokens in OAuth2AuthorizedClientService (in-memory).
+    When user clicks /print the client retrieves the authorized client and its access token and calls http://localhost:9100/api/contacts with Authorization: Bearer <access_token>.
+    Resource Server validates JWT by fetching JWKs from http://localhost:9000/.well-known/jwks.json, validates signature, scope and expiry. If valid, responds with contacts JSON.
+
+Running the sample (step-by-step)
+
+    Build each project with Maven:
+    cd auth-server → mvn clean package
+    cd contacts-api → mvn clean package
+    cd client-app → mvn clean package
+
+    Run apps in separate terminals:
+
+    java -jar auth-server/target/auth-server-0.0.1-SNAPSHOT.jar (or run from IDE)
+    java -jar contacts-api/target/contacts-api-0.0.1-SNAPSHOT.jar
+    java -jar client-app/target/client-app-0.0.1-SNAPSHOT.jar
+
+    Flow:
+
+    Open browser http://localhost:8080 → click Connect to Contacts
+    You will be redirected to http://localhost:9000/login — login as:
+
+    username: alice
+    password: password
+
+    Consent page asks to approve contacts.read → Approve
+
+    You’ll be redirected back to client and should see the “Fetch and Print Contacts” or printed contacts at /print.
+
+Important security notes & production considerations
+
+    This demo is for learning and local testing. In production you must:
+
+    Use HTTPS everywhere. Never use plain HTTP for OAuth flows in production.
+    Use secure, strong client secrets; use PKCE for public clients (mobile, SPA) — PKCE prevents intercepted authorization codes from being used.
+    Use long-lived refresh tokens carefully (rotate them, bind them to clients, revoke on suspicious use).
+    Use proper persistent stores for registered clients, authorizations and consents (DBs) rather than in-memory.
+    Add proper CSRF protections and validate state parameter.
+    Limit scopes to minimal needed. Monitor and audit token issuance.
+    Rotate signing keys and expose JWK set.
+    Implement token introspection / revocation endpoints if needed.
+    Configure session and cookie security, same-site attributes, etc.
+    Quick explanation of key code pieces (so you fully understand)
+    RegisteredClientRepository: registers OAuth clients (here print-client). Settings include allowed grant types, redirect URIs, scopes and whether consent is required.
+
+    JWKSource: provides RSA keys to sign JWT access tokens. Authorization Server exposes the public key (/.well-known/jwks.json), Resource Server fetches it to validate signatures.
+
+    Authorization Server endpoints: Spring Authorization Server creates /oauth2/authorize and /oauth2/token. Login and consent steps are standard.
+
+    Resource Server: configured to fetch JWK set URI and validate incoming Authorization header tokens automatically using spring-boot-starter-oauth2-resource-server.
+
+    Client: Spring Security OAuth2 Client handles building the authorization redirect, exchanging the code for tokens, and storing the OAuth2AuthorizedClient. We used OAuth2AuthorizedClientService to fetch tokens to call resource server.
+
+Extensions you can add
+
+    Switch to asymmetric key rotation using keystore and exposing multiple keys via JWK set.
+    Add OpenID Connect support (userinfo endpoint, openid scope) — then client can get ID token and user profile.
+    Implement PKCE (especially if making the client public).
+    Use a database-backed RegisteredClientRepository (e.g., JDBC) for dynamic client registration.
+    Add token revocation and introspection endpoints.
+    Replace static in-memory user store with a real user database and integrate multi-factor auth.
