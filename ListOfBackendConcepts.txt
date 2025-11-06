@@ -1,0 +1,267 @@
+🧩 LEVEL 1: FOUNDATIONAL COMPUTER SCIENCE
+
+These are your non-negotiables — every backend engineer needs these.
+
+🧠 Programming & CS Basics
+
+Data structures & algorithms (and their complexities)
+
+Memory management
+
+Recursion, iteration, and modular code
+
+Design patterns (Singleton, Factory, Observer, Strategy, etc.)
+
+Functional vs OOP paradigms
+
+⚙️ Computer Systems
+
+How a program runs (compilation, linking, execution)
+
+Processes, threads, and concurrency
+
+Synchronization (locks, semaphores, mutexes)
+
+File systems, I/O operations
+
+Scheduling and CPU utilization
+
+🧮 Mathematics for Engineers
+
+Discrete math (sets, graphs, logic)
+
+Probability & statistics (for monitoring, A/B testing)
+
+Basic number theory (hashing, cryptography fundamentals)
+
+🌍 LEVEL 2: INTERNET & NETWORKING
+
+To design scalable backend systems, you must know how the internet actually works.
+
+OSI and TCP/IP models
+
+HTTP/1.1, HTTP/2, HTTP/3
+
+DNS resolution
+
+Sockets and ports
+
+TCP vs UDP
+
+TLS/SSL, HTTPS, certificates
+
+REST, WebSockets, GraphQL, gRPC
+
+Load balancers, proxies, CDN basics
+
+🧱 LEVEL 3: BACKEND PROGRAMMING & APPLICATION DESIGN
+
+Pick one strong backend stack and understand it deeply.
+
+Language internals (memory model, concurrency model)
+
+Frameworks (Spring Boot, Express, Django, FastAPI, Gin)
+
+Dependency injection, modular design
+
+Logging, tracing, and observability
+
+Error handling and exception management
+
+Testing (unit, integration, contract)
+
+Version control (Git workflows, rebasing, branching)
+
+💾 LEVEL 4: DATA STORAGE & DATABASES
+
+Every backend app revolves around data.
+
+Relational Databases (SQL)
+
+Schema design and normalization
+
+Joins, indexes, transactions, constraints
+
+ACID properties
+
+Query optimization, explain plans
+
+Connection pooling
+
+NoSQL & Distributed Databases
+
+Key-value stores (Redis, DynamoDB)
+
+Document stores (MongoDB)
+
+Columnar stores (Cassandra, Bigtable)
+
+Graph databases (Neo4j)
+
+CAP theorem, BASE model
+
+Replication, partitioning, sharding
+
+Data Modeling
+
+ER diagrams
+
+One-to-many, many-to-many relationships
+
+Denormalization for performance
+
+⚡ LEVEL 5: SYSTEMS DESIGN & ARCHITECTURE
+
+This is what separates senior engineers from junior devs.
+
+Monolith vs Microservices architecture
+
+API design principles
+
+Service discovery
+
+Caching strategies (write-through, write-back, TTL)
+
+Message queues (Kafka, RabbitMQ, SQS)
+
+Event-driven and reactive systems
+
+Load balancing (round robin, consistent hashing)
+
+Rate limiting, throttling, and circuit breakers
+
+Idempotency
+
+CAP theorem in practice
+
+Database replication and sharding
+
+Scalability and fault tolerance
+
+Event sourcing and CQRS
+
+☁️ LEVEL 6: CLOUD, DEPLOYMENT & INFRASTRUCTURE
+
+Modern backend systems live in the cloud.
+
+Cloud platforms: AWS, GCP, Azure
+
+Virtual machines, containers (Docker)
+
+Container orchestration (Kubernetes)
+
+Infrastructure as Code (Terraform, Ansible)
+
+CI/CD pipelines
+
+Monitoring and alerting (Prometheus, Grafana)
+
+Serverless computing (AWS Lambda, Cloud Functions)
+
+Reverse proxies and gateways (Nginx, Envoy)
+
+🛡️ LEVEL 7: SECURITY & RELIABILITY
+
+Protect your system and your users.
+
+Authentication (JWT, OAuth2, OpenID Connect)
+
+Authorization (RBAC, ABAC)
+
+Data encryption (AES, RSA, hashing)
+
+Secure password storage (bcrypt, Argon2)
+
+Input validation and sanitization
+
+Secure HTTP headers
+
+Common vulnerabilities (OWASP Top 10)
+
+Secrets management (Vault, AWS Secrets Manager)
+
+Rate limiting, WAFs, DDOS prevention
+
+📈 LEVEL 8: PERFORMANCE & OBSERVABILITY
+
+Systems must be fast and measurable.
+
+Profiling (CPU, memory)
+
+Application performance monitoring (APM)
+
+Distributed tracing (Jaeger, OpenTelemetry)
+
+Log aggregation (ELK stack)
+
+Metrics and dashboards
+
+Caching layers
+
+Load testing and benchmarking
+
+🧩 LEVEL 9: ADVANCED & SPECIALIZED TOPICS
+
+These take you from good to expert.
+
+Distributed systems theory (consensus algorithms, leader election)
+
+Consistent hashing, quorum, gossip protocols
+
+Event streaming (Kafka, Pulsar)
+
+Domain-driven design (DDD)
+
+Data pipelines and ETL
+
+API gateways and service meshes
+
+GraphQL federation
+
+Edge computing and CDNs
+
+Multi-region and multi-cloud architectures
+
+💬 LEVEL 10: SOFTWARE ENGINEERING PRACTICES
+
+Strong backend engineers also excel at engineering craft.
+
+Code readability and maintainability
+
+Documentation and design docs
+
+Agile/Scrum methodologies
+
+Code reviews
+
+Mentoring and technical communication
+
+Project estimation and architectural trade-offs
+
+Testing in production and feature flags
+
+Ethical and responsible software design
+
+🎯 In Summary
+
+You should master concepts in these 10 pillars:
+
+Computer Science Foundations
+
+Networking
+
+Backend Programming
+
+Databases
+
+System Design
+
+Cloud & DevOps
+
+Security
+
+Performance & Observability
+
+Distributed Systems
+
+Engineering Practices
