@@ -1,3 +1,25 @@
 Creational Patterns:
+     - Singleton
+     - Factory Method
+     - Abstract Factory
+     - Builder
+     - Prototype
 Structural Patterns:
+    - Adapter
+    - Composite
+    - Proxy
+    - Decorator
+    - Facade
+    - Bridge
+    - Flyweight
 Behavioral Patterns:
+    - Observer
+    - Strategy
+    - Command
+    - Iterator
+    - State
+    - Template Method
+    - Mediator
+    - Chain of Responsibility
+    - Visitor
+    - Memento
