@@ -1,0 +1,56 @@
+1. Scalability & Distributed Systems
+
+
+Design a URL Shortener (e.g., Bitly)
+Design a Web Crawler (e.g., Googlebot)
+Design a Distributed File Storage (e.g., Dropbox, Google Drive)
+Design a Content Delivery Network (CDN) (e.g., Cloudflare)
+Design a Distributed Cache (e.g., Redis, Memcached)
+Design a Rate Limiter (API Gateway)
+Design a Notification System (push/email/SMS)
+Design a Real-Time Chat System (e.g., WhatsApp, Slack)
+Design a Video Streaming Platform (e.g., YouTube, Netflix)
+Design a News Feed System (e.g., Facebook feed)
+Design a Search Autocomplete System (e.g., Google search bar)
+Design a Recommendation System (e.g., Netflix, Amazon)
+2. Data Processing & Analytics
+
+
+Design a Log Analytics System (e.g., Splunk, ELK Stack)
+Design a Real-Time Analytics Platform (e.g., Google Analytics)
+Design a Data Warehouse (e.g., Amazon Redshift)
+3. Transactional & Financial Systems
+
+
+Design a Payment Gateway (e.g., Stripe, Razorpay)
+Design a Stock Trading Platform (e.g., Robinhood)
+Design a Fraud Detection System
+4. Social & Collaboration Platforms
+
+
+Design a Social Media Platform (e.g., Twitter, Facebook)
+Design a Blogging Platform (e.g., Medium)
+Design a Real-Time Collaboration Tool (e.g., Google Docs)
+Design a Virtual Classroom System (e.g., Zoom Classroom)
+5. E-commerce & Marketplace
+
+
+Design an E-commerce Platform (e.g., Amazon, Flipkart)
+Design a Shopping Cart System
+Design an Online Auction System (e.g., eBay)
+Design a Coupon/Discount Management System
+6. Infrastructure & DevOps
+
+
+Design a Monitoring and Alerting System (e.g., Datadog, Prometheus)
+Design a Workflow Orchestration System (e.g., Airflow, Temporal)
+Design a Feature Flag Management System (e.g., LaunchDarkly)
+Design a Multi-Tenant SaaS Platform (e.g., Salesforce)
+7. Specialized Domains
+
+
+Design a Health/Fitness Tracking System (e.g., Fitbit)
+Design a Logistics and Supply Chain Management System (e.g., DHL tracking)
+Design a Weather Forecasting System (e.g., AccuWeather)
+Design a Leaderboard System (e.g., gaming leaderboards)
+Design a Splitwise-like Expense Sharing App
